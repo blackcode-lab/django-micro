@@ -14,14 +14,15 @@ Django Micro — Lightweight wrapper for using Django as a microframework and wr
 **tl;dr:** See an example_ of full-featured application.
 
 
-Features
-========
+What's works
+============
 
 - `Configuration`_
 - `Views and routes`_
 - `Models and migrations`_
 - `Management commands`_
-- Custom template tags
+- `Custom template tags`_
+- `Testing`_
 - Admin interface
 - Third party apps
 
@@ -70,7 +71,7 @@ Compatibility
 
 Micro based only on latest stable version of Django. This is the only way to keep codebase of django-micro clean, without hacks for many versions of Django.
 
-- **Django version:** >=1.10, <1.11
+- **Django version:** >=1.10, <1.12
 - **Python version:** 2.7, >=3.4
 
 
@@ -100,7 +101,7 @@ This behaviour provided by single string: ``application = run()``. The strongest
 Configuration
 =============
 
-Call of the ``configure`` function should be placed at top of your application. Before definition views, models and imports another modules. Yes, it may violate PEP8. But this is the only way. For sample: you can't import any model from another application if Django is not configured.
+Call of the ``configure`` function should be placed at top of your application. Before definition views, models and imports another modules. Yes, it may violate PEP8. But this is the only way. You can't import any model from another application if Django is not configured.
 
 The good way is define all configuration in global namespace and call ``configure`` with ``locals()`` argument. Don't worry, configuration takes only *UPPERCASE* variables.
 
@@ -166,19 +167,28 @@ You always can access to ``urlpatterns`` for using the low-level API.
 Models and migrations
 =====================
 
-Micro normally works with models and migrations. Just define model in your ``app.py`` file. If you need migrations, create ``migrations`` directory next to the ``app.py``.
+Micro normally works with models and migrations. Just define model in your ``app.py`` file. If you need migrations, create ``migrations`` directory next to the ``app.py`` and call ``python app.py makemigrations``.
+
+.. code-block::
+
+    blog
+    ├── __init__.py
+    ├── app.py
+    └── migrations
+        ├── __init__.py
+        └── 0001_initial.py
 
 .. code-block:: python
 
     from django.db import models
 
     class Post(models.Model):
-      title = models.CharField(max_length=255)
+        title = models.CharField(max_length=255)
 
-      class Meta:
-          app_label = 'blog'
+        class Meta:
+            app_label = 'blog'
 
-**Note:** You always should set ``app_label`` attribute in ``Meta`` of your models. For sample: if application is placed in ``blog/app.py``, app_label must have a ``blog`` value.
+**Note:** You always need to set ``app_label`` attribute in ``Meta`` of your models. For example, if application placed in ``blog/app.py``, app_label should be ``blog``.
 
 For getting ``app_label`` you can use ``get_app_label`` shortcut.
 
@@ -222,12 +232,60 @@ You also can create function-based commands.
 Unfortunately the ``command`` decorator uses a few dirty hacks for commands registration. But everything works be fine if you don't think about it ;)
 
 
+Custom template tags
+====================
+
+Use ``template`` for register template tags. It works same as a ``register`` object in tag library file.
+
+.. code-block:: python
+
+    from django_micro import template
+
+    @template.simple_tag
+    def print_hello(name):
+        return 'Hello, {}!'
+
+    @template.filter
+    def remove_spaces(value):
+        return value.replace(' ', '')
+
+
+You don't need to use the ``load`` tag. All template tags are global.
+
+
+Testing
+=======
+
+No magick. Use built-in test cases.
+
+.. code-block:: python
+
+    from django.test import TestCase
+
+    class TestIndexView(TestCase):
+        def test_success(self):
+            response = self.client.get('/')
+            self.assertEqual(response.status_code, 200)
+
+To run tests which defined in app.py use the following command:
+
+.. code-block::
+
+    $ python app.py test __main__
+
+
+Who uses django-micro
+=====================
+
+- `storagl <https://github.com/zenwalker/storagl>`_ — simple storage for screenshots and other shared files with short direct links
+
+
 Related projects
 ================
 
-- importd_ — Popular implementation of django-as-microframework idea, but over-engineered, magical and not intuitive.
+- importd_ — Popular implementation of django-as-microframework idea, but over-engineered, in my opinion, and magical.
 
-- djmicro_ — Good and lightweight wrapper, but just an experimental, without support many features out-of-the-box, such as migrations or management commands **deprecated**
+- djmicro_ — Good and lightweight wrapper. I took a few ideas from there. But just an experimental, undocumented, less functional and **deprecated**.
 
 
 .. _example: https://github.com/zenwalker/django-micro/tree/master/example

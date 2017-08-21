@@ -13,21 +13,21 @@ from django.core.exceptions import ImproperlyConfigured
 
 __all__ = ['command', 'configure', 'run', 'route', 'template', 'get_app_label']
 
-
-# -------------------
-# Application module
-# -------------------
+register = template = Library()
+urlpatterns = []
 
 _app_module = None
 _app_label = None
+_commands = {}
 
 
 def _create_app(stack):
     # extract directory, filename and app label from parent module
     app_module = sys.modules[stack[1][0].f_locals['__name__']]
     app_dirname = os.path.dirname(os.path.abspath(app_module.__file__))
+    app_file_name = os.path.basename(app_module.__file__).split('.')[0]
     app_label = os.path.basename(app_dirname)
-    app_file_name = app_module.__file__.split('.')[0]
+
     app_module_name = '{}.{}'.format(app_label, app_file_name)
 
     # use parent directory of application as import root
@@ -52,13 +52,6 @@ def get_app_label():
     return _app_label
 
 
-# -------------------
-# Views and routes
-# -------------------
-
-urlpatterns = []
-
-
 def route(pattern, view_func=None, *args, **kwargs):
     def decorator(view_func):
         if hasattr(view_func, 'as_view'):
@@ -74,27 +67,18 @@ def route(pattern, view_func=None, *args, **kwargs):
     return decorator
 
 
-# -------------------
-# Template tags
-# -------------------
-
-register = template = Library()
-
-
-# --------------------
-# Configuration
-# --------------------
-
 def configure(config_dict={}):
     _create_app(inspect.stack())  # load application from parent module
-    config_dict.setdefault('TEMPLATE_DIRS', ['templates'])
+
+    if 'BASE_DIR' in config_dict:
+        config_dict.setdefault('TEMPLATE_DIRS', [os.path.join(config_dict['BASE_DIR'], 'templates')])
 
     kwargs = {
         'INSTALLED_APPS': [_app_label] + config_dict.pop('INSTALLED_APPS', []),
         'ROOT_URLCONF': __name__,
         'TEMPLATES': [{
             'BACKEND': 'django.template.backends.django.DjangoTemplates',
-            'DIRS': config_dict.pop('TEMPLATE_DIRS'),
+            'DIRS': config_dict.pop('TEMPLATE_DIRS', []),
             'APP_DIRS': True,
             'OPTIONS': {
                 'context_processors': config_dict.pop('CONTEXT_PROCESSORS', []),
@@ -108,14 +92,7 @@ def configure(config_dict={}):
     django.setup()
 
 
-# --------------------
-# Management commands
-# --------------------
-
-_commands = {}
-
-
-def patch_get_commands():
+def _patch_get_commands():
     django_get_commands = management.get_commands
 
     def patched_get_commands():
@@ -129,7 +106,7 @@ def patch_get_commands():
 
 def command(name=None, command_cls=None):
     if not getattr(management.get_commands, 'patched', False):
-        patch_get_commands()
+        _patch_get_commands()
 
     if inspect.isfunction(name):
         # Shift arguments if decroator called without brackets
@@ -147,7 +124,7 @@ def command(name=None, command_cls=None):
             command_instance = type('Command', (BaseCommand,), {'handle': command_cls})()
 
         if not command_name:
-            raise MicroException("Class-based commands requires name argument.")
+            raise DjangoMicroException("Class-based commands requires name argument.")
 
         # Hack for extracting app name from command (https://goo.gl/1c1Irj)
         command_instance.rpartition = lambda x: [_app_label]
@@ -163,17 +140,9 @@ def command(name=None, command_cls=None):
     return decorator
 
 
-# --------------------
-# Other tools
-# --------------------
-
-class MicroException(Exception):
+class DjangoMicroException(Exception):
     pass
 
-
-# --------------------
-# Bootstrap
-# --------------------
 
 def run():
     if not settings.configured:
